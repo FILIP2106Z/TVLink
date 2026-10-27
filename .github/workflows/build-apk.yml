@@ -18,7 +18,7 @@ permissions:
 
 jobs:
   build:
-    name: Build Debug & Release APKs
+    name: Build & Package APKs
     runs-on: ubuntu-latest
 
     steps:
@@ -71,49 +71,87 @@ jobs:
         run: |
           ./gradlew assembleDebug assembleRelease --no-daemon --stacktrace
 
-      - name: Prepare Clean Release Asset Filenames
+      - name: Prepare Release Assets & Checksums
+        id: assets
         run: |
           mkdir -p release-assets
-          find app/build/outputs/apk/release -name "*.apk" -exec cp {} release-assets/TVLink-release.apk \;
-          find app/build/outputs/apk/debug -name "*.apk" -exec cp {} release-assets/TVLink-debug.apk \;
-          ls -la release-assets/
+          find app/build/outputs/apk/release -name "*.apk" -exec cp {} release-assets/TVLink-v1.0.0.apk \;
+          find app/build/outputs/apk/debug -name "*.apk" -exec cp {} release-assets/TVLink-v1.0.0-debug.apk \;
+          
+          cd release-assets
+          sha256sum TVLink-v1.0.0.apk TVLink-v1.0.0-debug.apk > checksums.txt
+          
+          echo "Generated Checksums:"
+          cat checksums.txt
+          
+          # Write checksums to output for release body
+          echo "CHECKSUMS<<EOF" >> $GITHUB_OUTPUT
+          cat checksums.txt >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+          cd ..
 
       - name: Upload Debug APK Artifact
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: TVLink-Debug-APK
-          path: release-assets/TVLink-debug.apk
+          name: TVLink-v1.0.0-debug
+          path: release-assets/TVLink-v1.0.0-debug.apk
           if-no-files-found: warn
 
       - name: Upload Release APK Artifact
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: TVLink-Release-APK
-          path: release-assets/TVLink-release.apk
+          name: TVLink-v1.0.0-release
+          path: release-assets/TVLink-v1.0.0.apk
           if-no-files-found: warn
 
-      - name: Publish to GitHub Releases (For Obtainium & Direct Downloads)
+      - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         if: github.event_name != 'pull_request'
         with:
-          tag_name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || 'latest' }}
-          name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || 'TVLink Latest Release' }}
+          tag_name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || 'v1.0.0' }}
+          name: TVLink v1.0.0
           draft: false
           prerelease: false
           make_latest: true
+          generate_release_notes: true
           body: |
-            ### TVLink Latest Release
-            Wireless remote control, app manager, and ADB terminal for Android TV.
+            ## TVLink v1.0.0 📺
             
-            - Compatible with **Obtainium** for 1-tap installation and automatic background updates.
-            
-            #### Download Links:
-            - **[TVLink-release.apk](https://github.com/${{ github.repository }}/releases/download/latest/TVLink-release.apk)** (Recommended)
-            - **[TVLink-debug.apk](https://github.com/${{ github.repository }}/releases/download/latest/TVLink-debug.apk)**
+            A modern, open-source wireless ADB remote control, app sideload installer, and TV settings manager for Android TV and Google TV devices over local Wi-Fi.
+
+            ---
+
+            ### ✨ Highlights & Features
+            * **🎮 Virtual TV Remote**: Ergonomic D-pad, Home, Back, Menu, Volume, Power, and phone keyboard text injection.
+            * **🚀 1-Tap APK Sideload**: Install APKs from your phone or directly from GitHub/web URLs with 1-tap presets (SmartTube, CleanYourTV, Nova Player).
+            * **🛡️ Debloat & Disable Apps**: Safely freeze or disable pre-installed TV bloatware without root (`pm disable-user --user 0`).
+            * **⚡ TV Speed Booster**: Instant 2x speed tweak (0.5x UI animation scales) and background process memory cleaner.
+            * **⚙️ Hidden TV Settings**: Change screen resolution, display density (DPI scaler), and enable system-wide ad-blocking via Encrypted Private DNS (AdGuard / Cloudflare).
+            * **💻 Wireless ADB Terminal**: Full interactive shell with TV diagnostic shortcuts (`dumpsys`, `pm`, `top`, `ip`).
+            * **🔍 Auto-Discovery**: Automatic network detection via mDNS (`_adb._tcp.`) and subnet port sweeps.
+
+            ---
+
+            ### 📲 Obtainium Setup (Automated Updates)
+            To get automated background updates on your phone or Android TV:
+            1. Open **[Obtainium](https://github.com/ImranR98/Obtainium)**.
+            2. Tap **Add App** and enter:
+               ```text
+               https://github.com/${{ github.repository }}
+               ```
+            3. Obtainium will automatically detect and install **`TVLink-v1.0.0.apk`** and notify you when new releases are published.
+
+            ---
+
+            ### 📦 SHA-256 Checksums
+            ```
+            ${{ steps.assets.outputs.CHECKSUMS }}
+            ```
           files: |
-            release-assets/TVLink-release.apk
-            release-assets/TVLink-debug.apk
+            release-assets/TVLink-v1.0.0.apk
+            release-assets/TVLink-v1.0.0-debug.apk
+            release-assets/checksums.txt
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -18,9 +18,9 @@
    ```text
    https://github.com/FILIP2106Z/AdbTv-
    ```
-3. Tap **Add** — Obtainium will automatically download `TVLink-release.apk` and notify you when new updates are released!
+3. Tap **Add** — Obtainium will automatically download `TVLink-v1.0.0.apk` and notify you when new updates are released!
 
-Or download directly from [GitHub Releases](https://github.com/FILIP2106Z/AdbTv-/releases/latest).
+Or download directly from the [GitHub Releases](https://github.com/FILIP2106Z/AdbTv-/releases/latest) page.
 
 ---
 
