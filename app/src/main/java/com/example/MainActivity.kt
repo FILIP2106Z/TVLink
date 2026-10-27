@@ -113,7 +113,7 @@ class MainActivity : ComponentActivity() {
                                     )
                                     Spacer(modifier = Modifier.width(10.dp))
                                     Text(
-                                        text = "AdbTV Remote",
+                                        text = "TVLink",
                                         fontWeight = FontWeight.Bold,
                                         fontSize = 19.sp
                                     )

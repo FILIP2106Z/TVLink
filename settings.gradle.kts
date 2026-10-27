@@ -22,6 +22,6 @@ dependencyResolutionManagement {
   }
 }
 
-rootProject.name = "AdbCommander"
+rootProject.name = "TVLink"
 
 include(":app")

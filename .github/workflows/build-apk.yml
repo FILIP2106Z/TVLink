@@ -74,24 +74,24 @@ jobs:
       - name: Prepare Clean Release Asset Filenames
         run: |
           mkdir -p release-assets
-          find app/build/outputs/apk/release -name "*.apk" -exec cp {} release-assets/AdbCommander-release.apk \;
-          find app/build/outputs/apk/debug -name "*.apk" -exec cp {} release-assets/AdbCommander-debug.apk \;
+          find app/build/outputs/apk/release -name "*.apk" -exec cp {} release-assets/TVLink-release.apk \;
+          find app/build/outputs/apk/debug -name "*.apk" -exec cp {} release-assets/TVLink-debug.apk \;
           ls -la release-assets/
 
       - name: Upload Debug APK Artifact
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: AdbCommander-Debug-APK
-          path: release-assets/AdbCommander-debug.apk
+          name: TVLink-Debug-APK
+          path: release-assets/TVLink-debug.apk
           if-no-files-found: warn
 
       - name: Upload Release APK Artifact
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: AdbCommander-Release-APK
-          path: release-assets/AdbCommander-release.apk
+          name: TVLink-Release-APK
+          path: release-assets/TVLink-release.apk
           if-no-files-found: warn
 
       - name: Publish to GitHub Releases (For Obtainium & Direct Downloads)
@@ -99,20 +99,21 @@ jobs:
         if: github.event_name != 'pull_request'
         with:
           tag_name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || 'latest' }}
-          name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || 'AdbCommander Latest Release' }}
+          name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || 'TVLink Latest Release' }}
           draft: false
           prerelease: false
           make_latest: true
           body: |
-            ### AdbCommander Latest Release
-            - Wireless ADB terminal, TV remote control, APK sideload installer, and system settings manager for Android TV / Google TV.
-            - Compatible with **Obtainium** for automatic updates and direct installation.
+            ### TVLink Latest Release
+            Wireless remote control, app manager, and ADB terminal for Android TV.
             
-            #### Download:
-            - **[AdbCommander-release.apk](https://github.com/${{ github.repository }}/releases/download/latest/AdbCommander-release.apk)** (Recommended)
-            - **[AdbCommander-debug.apk](https://github.com/${{ github.repository }}/releases/download/latest/AdbCommander-debug.apk)**
+            - Compatible with **Obtainium** for 1-tap installation and automatic background updates.
+            
+            #### Download Links:
+            - **[TVLink-release.apk](https://github.com/${{ github.repository }}/releases/download/latest/TVLink-release.apk)** (Recommended)
+            - **[TVLink-debug.apk](https://github.com/${{ github.repository }}/releases/download/latest/TVLink-debug.apk)**
           files: |
-            release-assets/AdbCommander-release.apk
-            release-assets/AdbCommander-debug.apk
+            release-assets/TVLink-release.apk
+            release-assets/TVLink-debug.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

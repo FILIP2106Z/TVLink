@@ -3,6 +3,6 @@
     <item
         android:width="66dp"
         android:height="66dp"
-        android:drawable="@drawable/remote_tv_icon_1793135056769"
+        android:drawable="@drawable/tvlink_icon_1793140993288"
         android:gravity="center" />
 </layer-list>

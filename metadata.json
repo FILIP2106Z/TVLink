@@ -1,6 +1,6 @@
 {
-  "name": "AdbCommander",
-  "description": "Wireless ADB terminal, TV remote control, and package manager for Android TV and Google TV devices over Wi-Fi without root or PC.",
+  "name": "TVLink",
+  "description": "Wireless remote control, app manager, and ADB terminal for Android TV.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }
