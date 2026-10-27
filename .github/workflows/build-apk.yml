@@ -13,7 +13,7 @@ on:
 
 jobs:
   build:
-    name: Build Debug and Release APKs
+    name: Build Debug & Release APKs
     runs-on: ubuntu-latest
 
     steps:
@@ -25,30 +25,40 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: '17'
-          cache: 'gradle'
-
-      - name: Grant Execute Permission for Gradlew
-        run: chmod +x gradlew || true
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Build Debug APK
-        run: ./gradlew assembleDebug --stacktrace
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
 
-      - name: Build Release APK (Unsigned)
-        run: ./gradlew assembleRelease --stacktrace
+      - name: Ensure Executable Permissions
+        run: |
+          if [ -f gradlew ]; then
+            chmod +x gradlew
+          else
+            gradle wrapper
+            chmod +x gradlew
+          fi
+
+      - name: Build Debug APK
+        run: ./gradlew assembleDebug --no-daemon --stacktrace
+
+      - name: Build Release APK
+        run: ./gradlew assembleRelease --no-daemon --stacktrace
 
       - name: Upload Debug APK Artifact
         uses: actions/upload-artifact@v4
+        if: always()
         with:
-          name: adbtv-remote-debug
+          name: AdbCommander-Debug-APK
           path: app/build/outputs/apk/debug/*.apk
-          retention-days: 14
+          if-no-files-found: warn
 
       - name: Upload Release APK Artifact
         uses: actions/upload-artifact@v4
+        if: always()
         with:
-          name: adbtv-remote-release
+          name: AdbCommander-Release-APK
           path: app/build/outputs/apk/release/*.apk
-          retention-days: 14
+          if-no-files-found: warn

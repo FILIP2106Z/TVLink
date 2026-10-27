@@ -209,11 +209,21 @@ class AdbManager(private val context: Context) {
             val apps = mutableListOf<InstalledApp>()
 
             try {
+                // Fetch disabled packages to mark debloated apps
+                val disabledResponse = dadb.shell("pm list packages -d")
+                val disabledPkgs = parsePackages(disabledResponse.allOutput)
+
                 // Fetch 3rd party user installed apps
                 val userPkgsResponse = dadb.shell("pm list packages -3")
                 val userPkgs = parsePackages(userPkgsResponse.allOutput)
                 userPkgs.forEach { pkg ->
-                    apps.add(InstalledApp(packageName = pkg, isSystem = false))
+                    apps.add(
+                        InstalledApp(
+                            packageName = pkg,
+                            isSystem = false,
+                            isDisabled = disabledPkgs.contains(pkg)
+                        )
+                    )
                 }
 
                 if (includeSystem) {
@@ -222,7 +232,13 @@ class AdbManager(private val context: Context) {
                     val sysPkgs = parsePackages(sysPkgsResponse.allOutput)
                     sysPkgs.forEach { pkg ->
                         if (!userPkgs.contains(pkg)) {
-                            apps.add(InstalledApp(packageName = pkg, isSystem = true))
+                            apps.add(
+                                InstalledApp(
+                                    packageName = pkg,
+                                    isSystem = true,
+                                    isDisabled = disabledPkgs.contains(pkg)
+                                )
+                            )
                         }
                     }
                 }
@@ -265,5 +281,49 @@ class AdbManager(private val context: Context) {
     suspend fun uninstallApp(packageName: String): Boolean = withContext(Dispatchers.IO) {
         val res = executeShell("pm uninstall $packageName")
         !res.isError && res.output.contains("Success", ignoreCase = true)
+    }
+
+    suspend fun disableApp(packageName: String): Boolean = withContext(Dispatchers.IO) {
+        val res = executeShell("pm disable-user --user 0 $packageName")
+        !res.isError && (res.output.contains("disabled", ignoreCase = true) || res.output.contains("new state", ignoreCase = true))
+    }
+
+    suspend fun enableApp(packageName: String): Boolean = withContext(Dispatchers.IO) {
+        val res = executeShell("pm enable $packageName")
+        !res.isError && (res.output.contains("enabled", ignoreCase = true) || res.output.contains("new state", ignoreCase = true))
+    }
+
+    suspend fun installApk(file: File): Result<String> = withContext(Dispatchers.IO) {
+        val dadb = currentDadb ?: return@withContext Result.failure(IllegalStateException("Not connected"))
+        try {
+            dadb.install(file)
+            Result.success("APK installed successfully on Android TV")
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to install APK", e)
+            Result.failure(e)
+        }
+    }
+
+    suspend fun setAnimationScale(scale: Float): Boolean = withContext(Dispatchers.IO) {
+        val dadb = currentDadb ?: return@withContext false
+        try {
+            dadb.shell("settings put global window_animation_scale $scale")
+            dadb.shell("settings put global transition_animation_scale $scale")
+            dadb.shell("settings put global animator_duration_scale $scale")
+            true
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    suspend fun killBackgroundProcesses(): Boolean = withContext(Dispatchers.IO) {
+        val res = executeShell("am kill-all")
+        !res.isError
+    }
+
+    suspend fun rebootDevice(mode: String = ""): Boolean = withContext(Dispatchers.IO) {
+        val cmd = if (mode.isNotBlank()) "reboot $mode" else "reboot"
+        val res = executeShell(cmd)
+        !res.isError
     }
 }

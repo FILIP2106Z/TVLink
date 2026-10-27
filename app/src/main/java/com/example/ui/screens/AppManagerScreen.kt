@@ -1,7 +1,11 @@
 package com.example.ui.screens
 
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -15,25 +19,34 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Apps
+import androidx.compose.material.icons.filled.Block
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CleaningServices
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.FileUpload
+import androidx.compose.material.icons.filled.FlashOn
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ElevatedButton
 import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -55,6 +68,7 @@ import com.example.model.ConnectionState
 import com.example.model.InstalledApp
 import com.example.ui.AppFilter
 import com.example.ui.theme.TerminalAmber
+import com.example.ui.theme.TerminalGreen
 import com.example.ui.theme.TerminalRed
 
 @Composable
@@ -71,17 +85,31 @@ fun AppManagerScreen(
     onForceStopApp: (String) -> Unit,
     onClearData: (String) -> Unit,
     onUninstallApp: (String) -> Unit,
+    onDisableApp: (String) -> Unit,
+    onEnableApp: (String) -> Unit,
+    onInstallApk: (Uri) -> Unit,
+    onSpeedBoost: (Float) -> Unit,
+    onKillTasks: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val isConnected = connectionState is ConnectionState.Connected
     var appToConfirmClear by remember { mutableStateOf<InstalledApp?>(null) }
     var appToConfirmUninstall by remember { mutableStateOf<InstalledApp?>(null) }
+    var appToConfirmDisable by remember { mutableStateOf<InstalledApp?>(null) }
+    var showSpeedDialog by remember { mutableStateOf(false) }
+
+    val apkPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        uri?.let { onInstallApk(it) }
+    }
 
     val filteredApps = remember(installedApps, filter, searchQuery) {
         installedApps.filter { app ->
             val matchesFilter = when (filter) {
-                AppFilter.USER_ONLY -> !app.isSystem
-                AppFilter.SYSTEM_ONLY -> app.isSystem
+                AppFilter.USER_ONLY -> !app.isSystem && !app.isDisabled
+                AppFilter.SYSTEM_ONLY -> app.isSystem && !app.isDisabled
+                AppFilter.DISABLED_ONLY -> app.isDisabled
                 AppFilter.ALL -> true
             }
             val matchesSearch = searchQuery.isBlank() ||
@@ -97,6 +125,51 @@ fun AppManagerScreen(
             .padding(horizontal = 16.dp)
             .testTag("app_manager_screen")
     ) {
+        // Quick Action Bar: Sideload APK & TV Speed Booster
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            ElevatedButton(
+                onClick = { apkPickerLauncher.launch("application/vnd.android.package-archive") },
+                enabled = isConnected,
+                modifier = Modifier
+                    .weight(1f)
+                    .height(44.dp)
+                    .testTag("sideload_apk_button"),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.FileUpload,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text("Sideload APK", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+            }
+
+            OutlinedButton(
+                onClick = { showSpeedDialog = true },
+                enabled = isConnected,
+                modifier = Modifier
+                    .weight(1f)
+                    .height(44.dp)
+                    .testTag("speed_boost_button"),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Speed,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp),
+                    tint = MaterialTheme.colorScheme.primary
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text("TV Booster", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+            }
+        }
+
         // Search & Refresh Row
         Row(
             modifier = Modifier
@@ -107,7 +180,7 @@ fun AppManagerScreen(
             OutlinedTextField(
                 value = searchQuery,
                 onValueChange = onSearchChange,
-                placeholder = { Text("Search installed packages...") },
+                placeholder = { Text("Search packages...") },
                 leadingIcon = {
                     Icon(
                         imageVector = Icons.Default.Search,
@@ -140,10 +213,11 @@ fun AppManagerScreen(
             }
         }
 
-        // Filter Chips
+        // Filter Chips (Horizontal Scrollable)
         Row(
             modifier = Modifier
                 .fillMaxWidth()
+                .horizontalScroll(rememberScrollState())
                 .padding(bottom = 8.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
@@ -156,13 +230,19 @@ fun AppManagerScreen(
             FilterChip(
                 selected = filter == AppFilter.ALL,
                 onClick = { onFilterChange(AppFilter.ALL) },
-                label = { Text("All Apps") },
+                label = { Text("All (${installedApps.size})") },
                 shape = RoundedCornerShape(12.dp)
             )
             FilterChip(
                 selected = filter == AppFilter.SYSTEM_ONLY,
                 onClick = { onFilterChange(AppFilter.SYSTEM_ONLY) },
-                label = { Text("System Apps") },
+                label = { Text("System") },
+                shape = RoundedCornerShape(12.dp)
+            )
+            FilterChip(
+                selected = filter == AppFilter.DISABLED_ONLY,
+                onClick = { onFilterChange(AppFilter.DISABLED_ONLY) },
+                label = { Text("Debloated (${installedApps.count { it.isDisabled }})") },
                 shape = RoundedCornerShape(12.dp)
             )
         }
@@ -189,7 +269,7 @@ fun AppManagerScreen(
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = "Once connected, your TV's installed apps will appear here",
+                        text = "Once connected, your TV's installed packages will appear here",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -234,7 +314,9 @@ fun AppManagerScreen(
                         onLaunch = { onLaunchApp(app.packageName) },
                         onForceStop = { onForceStopApp(app.packageName) },
                         onClearData = { appToConfirmClear = app },
-                        onUninstall = { appToConfirmUninstall = app }
+                        onUninstall = { appToConfirmUninstall = app },
+                        onDisable = { appToConfirmDisable = app },
+                        onEnable = { onEnableApp(app.packageName) }
                     )
                 }
                 item {
@@ -252,7 +334,7 @@ fun AppManagerScreen(
             icon = { Icon(Icons.Default.CleaningServices, contentDescription = null, tint = TerminalAmber) },
             title = { Text("Clear App Data?") },
             text = {
-                Text("This will delete all temporary data, cache, and sign-ins for ${app.packageName} on your TV.")
+                Text("This will wipe all cached data, configuration, and logins for ${app.packageName} on your Android TV.")
             },
             confirmButton = {
                 TextButton(
@@ -280,7 +362,7 @@ fun AppManagerScreen(
             icon = { Icon(Icons.Default.Delete, contentDescription = null, tint = TerminalRed) },
             title = { Text("Uninstall App?") },
             text = {
-                Text("Are you sure you want to remotely uninstall ${app.packageName} from your Android TV?")
+                Text("Are you sure you want to completely uninstall ${app.packageName} from your Android TV?")
             },
             confirmButton = {
                 TextButton(
@@ -299,6 +381,100 @@ fun AppManagerScreen(
             }
         )
     }
+
+    // Confirmation Dialog: Disable / Debloat
+    if (appToConfirmDisable != null) {
+        val app = appToConfirmDisable!!
+        AlertDialog(
+            onDismissRequest = { appToConfirmDisable = null },
+            icon = { Icon(Icons.Default.Block, contentDescription = null, tint = TerminalAmber) },
+            title = { Text("Debloat / Disable App?") },
+            text = {
+                Text("This will safely disable ${app.packageName} without root (pm disable-user --user 0). You can re-enable it at any time.")
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        onDisableApp(app.packageName)
+                        appToConfirmDisable = null
+                    }
+                ) {
+                    Text("Disable App", color = TerminalAmber)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { appToConfirmDisable = null }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
+    // TV Speed Booster Dialog
+    if (showSpeedDialog) {
+        AlertDialog(
+            onDismissRequest = { showSpeedDialog = false },
+            icon = { Icon(Icons.Default.Speed, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
+            title = { Text("Android TV Speed Tweaks") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(
+                        "Android TV devices often lag due to slow UI animation scales and background processes. Apply these instant tweaks:",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+
+                    Button(
+                        onClick = {
+                            onSpeedBoost(0.5f)
+                            showSpeedDialog = false
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Text("⚡ 2x Speed Mode (0.5x Animations)")
+                    }
+
+                    Button(
+                        onClick = {
+                            onSpeedBoost(0.0f)
+                            showSpeedDialog = false
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
+                    ) {
+                        Text("🚀 Ultra Fast (Animations OFF)")
+                    }
+
+                    OutlinedButton(
+                        onClick = {
+                            onKillTasks()
+                            showSpeedDialog = false
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Text("🧹 Kill Cached Background Processes")
+                    }
+
+                    TextButton(
+                        onClick = {
+                            onSpeedBoost(1.0f)
+                            showSpeedDialog = false
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Reset Animations to Default (1.0x)")
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showSpeedDialog = false }) {
+                    Text("Close")
+                }
+            }
+        )
+    }
 }
 
 @Composable
@@ -307,7 +483,9 @@ private fun AppItemCard(
     onLaunch: () -> Unit,
     onForceStop: () -> Unit,
     onClearData: () -> Unit,
-    onUninstall: () -> Unit
+    onUninstall: () -> Unit,
+    onDisable: () -> Unit,
+    onEnable: () -> Unit
 ) {
     Card(
         modifier = Modifier
@@ -315,7 +493,7 @@ private fun AppItemCard(
             .testTag("app_item_${app.packageName}"),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface
+            containerColor = if (app.isDisabled) MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f) else MaterialTheme.colorScheme.surface
         )
     ) {
         Row(
@@ -331,7 +509,11 @@ private fun AppItemCard(
             ) {
                 Surface(
                     shape = RoundedCornerShape(12.dp),
-                    color = if (app.isSystem) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.primaryContainer,
+                    color = when {
+                        app.isDisabled -> MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)
+                        app.isSystem -> MaterialTheme.colorScheme.surfaceVariant
+                        else -> MaterialTheme.colorScheme.primaryContainer
+                    },
                     modifier = Modifier.size(42.dp)
                 ) {
                     Box(contentAlignment = Alignment.Center) {
@@ -339,7 +521,11 @@ private fun AppItemCard(
                             text = app.label.take(2).uppercase(),
                             fontWeight = FontWeight.Bold,
                             fontSize = 14.sp,
-                            color = if (app.isSystem) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onPrimaryContainer
+                            color = when {
+                                app.isDisabled -> MaterialTheme.colorScheme.outline
+                                app.isSystem -> MaterialTheme.colorScheme.onSurfaceVariant
+                                else -> MaterialTheme.colorScheme.onPrimaryContainer
+                            }
                         )
                     }
                 }
@@ -356,13 +542,25 @@ private fun AppItemCard(
                         Spacer(modifier = Modifier.width(6.dp))
                         Surface(
                             shape = RoundedCornerShape(4.dp),
-                            color = if (app.isSystem) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f)
+                            color = when {
+                                app.isDisabled -> TerminalAmber.copy(alpha = 0.2f)
+                                app.isSystem -> MaterialTheme.colorScheme.surfaceVariant
+                                else -> MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f)
+                            }
                         ) {
                             Text(
-                                text = if (app.isSystem) "System" else "User",
+                                text = when {
+                                    app.isDisabled -> "Debloated"
+                                    app.isSystem -> "System"
+                                    else -> "User"
+                                },
                                 fontSize = 10.sp,
                                 modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp),
-                                color = if (app.isSystem) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.secondary
+                                color = when {
+                                    app.isDisabled -> TerminalAmber
+                                    app.isSystem -> MaterialTheme.colorScheme.onSurfaceVariant
+                                    else -> MaterialTheme.colorScheme.secondary
+                                }
                             )
                         }
                     }
@@ -378,28 +576,54 @@ private fun AppItemCard(
 
             // Quick actions on each app
             Row(verticalAlignment = Alignment.CenterVertically) {
-                IconButton(
-                    onClick = onLaunch,
-                    modifier = Modifier.size(36.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.PlayArrow,
-                        contentDescription = "Launch",
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
+                if (app.isDisabled) {
+                    IconButton(
+                        onClick = onEnable,
+                        modifier = Modifier.size(36.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Check,
+                            contentDescription = "Re-enable App",
+                            tint = TerminalGreen,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                } else {
+                    IconButton(
+                        onClick = onLaunch,
+                        modifier = Modifier.size(36.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.PlayArrow,
+                            contentDescription = "Launch",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
 
-                IconButton(
-                    onClick = onForceStop,
-                    modifier = Modifier.size(36.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Stop,
-                        contentDescription = "Force Stop",
-                        tint = MaterialTheme.colorScheme.error,
-                        modifier = Modifier.size(20.dp)
-                    )
+                    IconButton(
+                        onClick = onForceStop,
+                        modifier = Modifier.size(36.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Stop,
+                            contentDescription = "Force Stop",
+                            tint = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+
+                    IconButton(
+                        onClick = onDisable,
+                        modifier = Modifier.size(36.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Block,
+                            contentDescription = "Debloat / Disable",
+                            tint = TerminalAmber,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
                 }
 
                 IconButton(

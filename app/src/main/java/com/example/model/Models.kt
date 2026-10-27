@@ -30,6 +30,7 @@ data class AdbCommandLog(
 data class InstalledApp(
     val packageName: String,
     val isSystem: Boolean,
+    val isDisabled: Boolean = false,
     val label: String = packageName.substringAfterLast('.').replaceFirstChar { it.uppercase() },
     val versionName: String = ""
 )

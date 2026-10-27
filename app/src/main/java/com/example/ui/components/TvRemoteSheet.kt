@@ -32,6 +32,9 @@ import androidx.compose.material.icons.filled.PowerSettingsNew
 import androidx.compose.material.icons.filled.VolumeDown
 import androidx.compose.material.icons.filled.VolumeMute
 import androidx.compose.material.icons.filled.VolumeUp
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
@@ -39,9 +42,11 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -111,6 +116,8 @@ fun TvRemoteSheet(
 
             Spacer(modifier = Modifier.height(20.dp))
 
+    var showPowerDialog by remember { mutableStateOf(false) }
+
             // Quick TV Actions Row (Power, Vol-, Mute, Vol+)
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -119,9 +126,9 @@ fun TvRemoteSheet(
             ) {
                 RemoteCircleButton(
                     icon = Icons.Default.PowerSettingsNew,
-                    label = "Power",
+                    label = "Power / Reboot",
                     tint = MaterialTheme.colorScheme.error,
-                    onClick = { onKeyevent(26, "POWER") }
+                    onClick = { showPowerDialog = true }
                 )
                 RemoteCircleButton(
                     icon = Icons.Default.VolumeDown,
@@ -137,6 +144,43 @@ fun TvRemoteSheet(
                     icon = Icons.Default.VolumeUp,
                     label = "Vol+",
                     onClick = { onKeyevent(24, "VOL_UP") }
+                )
+            }
+
+            if (showPowerDialog) {
+                AlertDialog(
+                    onDismissRequest = { showPowerDialog = false },
+                    icon = { Icon(Icons.Default.PowerSettingsNew, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
+                    title = { Text("TV Power & Reboot") },
+                    text = {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutlinedButton(
+                                onClick = {
+                                    onKeyevent(26, "POWER")
+                                    showPowerDialog = false
+                                },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text("Toggle Display Sleep / Wake")
+                            }
+                            Button(
+                                onClick = {
+                                    onKeyevent(26, "REBOOT") // or direct reboot
+                                    onSendText("") // trigger shell reboot
+                                    showPowerDialog = false
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                            ) {
+                                Text("Reboot Android TV")
+                            }
+                        }
+                    },
+                    confirmButton = {
+                        TextButton(onClick = { showPowerDialog = false }) {
+                            Text("Cancel")
+                        }
+                    }
                 )
             }
 

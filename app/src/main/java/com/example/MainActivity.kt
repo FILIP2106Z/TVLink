@@ -284,7 +284,12 @@ class MainActivity : ComponentActivity() {
                                 onLaunchApp = { pkg -> viewModel.launchApp(pkg) },
                                 onForceStopApp = { pkg -> viewModel.forceStopApp(pkg) },
                                 onClearData = { pkg -> viewModel.clearAppData(pkg) },
-                                onUninstallApp = { pkg -> viewModel.uninstallApp(pkg) }
+                                onUninstallApp = { pkg -> viewModel.uninstallApp(pkg) },
+                                onDisableApp = { pkg -> viewModel.disableApp(pkg) },
+                                onEnableApp = { pkg -> viewModel.enableApp(pkg) },
+                                onInstallApk = { uri -> viewModel.installApkFromUri(uri) },
+                                onSpeedBoost = { scale -> viewModel.setSpeedBoost(scale) },
+                                onKillTasks = { viewModel.killBackgroundProcesses() }
                             )
                         }
 

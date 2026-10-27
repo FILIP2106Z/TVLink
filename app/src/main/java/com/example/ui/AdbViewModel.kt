@@ -20,7 +20,8 @@ import kotlinx.coroutines.launch
 enum class AppFilter {
     USER_ONLY,
     ALL,
-    SYSTEM_ONLY
+    SYSTEM_ONLY,
+    DISABLED_ONLY
 }
 
 class AdbViewModel(application: Application) : AndroidViewModel(application) {
@@ -183,6 +184,84 @@ class AdbViewModel(application: Application) : AndroidViewModel(application) {
             } else {
                 _statusMessage.value = "Failed to uninstall $packageName"
             }
+        }
+    }
+
+    fun disableApp(packageName: String) {
+        viewModelScope.launch {
+            val success = adbManager.disableApp(packageName)
+            if (success) {
+                _statusMessage.value = "Disabled / Debloated $packageName"
+                _installedApps.update { list ->
+                    list.map { if (it.packageName == packageName) it.copy(isDisabled = true) else it }
+                }
+            } else {
+                _statusMessage.value = "Failed to disable $packageName"
+            }
+        }
+    }
+
+    fun enableApp(packageName: String) {
+        viewModelScope.launch {
+            val success = adbManager.enableApp(packageName)
+            if (success) {
+                _statusMessage.value = "Re-enabled $packageName"
+                _installedApps.update { list ->
+                    list.map { if (it.packageName == packageName) it.copy(isDisabled = false) else it }
+                }
+            } else {
+                _statusMessage.value = "Failed to enable $packageName"
+            }
+        }
+    }
+
+    fun installApkFromUri(uri: android.net.Uri) {
+        viewModelScope.launch {
+            _statusMessage.value = "Uploading and installing APK on TV..."
+            val context = getApplication<Application>()
+            try {
+                val tempFile = java.io.File(context.cacheDir, "sideload.apk")
+                context.contentResolver.openInputStream(uri)?.use { input ->
+                    tempFile.outputStream().use { output ->
+                        input.copyTo(output)
+                    }
+                }
+                val res = adbManager.installApk(tempFile)
+                tempFile.delete()
+                res.onSuccess {
+                    _statusMessage.value = "APK installed successfully on Android TV!"
+                    refreshApps()
+                }.onFailure { err ->
+                    _statusMessage.value = "Install failed: ${err.message}"
+                }
+            } catch (e: Exception) {
+                _statusMessage.value = "Error preparing APK: ${e.message}"
+            }
+        }
+    }
+
+    fun setSpeedBoost(scale: Float) {
+        viewModelScope.launch {
+            val success = adbManager.setAnimationScale(scale)
+            if (success) {
+                _statusMessage.value = if (scale == 0f) "Animations OFF (Ultra Snappy)" else "Animations set to ${scale}x speed"
+            } else {
+                _statusMessage.value = "Failed to apply speed tweak"
+            }
+        }
+    }
+
+    fun killBackgroundProcesses() {
+        viewModelScope.launch {
+            val success = adbManager.killBackgroundProcesses()
+            _statusMessage.value = if (success) "Background processes cleared" else "Failed to clear tasks"
+        }
+    }
+
+    fun rebootTv(mode: String = "") {
+        viewModelScope.launch {
+            val success = adbManager.rebootDevice(mode)
+            _statusMessage.value = if (success) "Reboot command sent to TV" else "Failed to send reboot"
         }
     }
 

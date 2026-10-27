@@ -22,6 +22,6 @@ dependencyResolutionManagement {
   }
 }
 
-rootProject.name = "AdbTV Remote"
+rootProject.name = "AdbCommander"
 
 include(":app")
