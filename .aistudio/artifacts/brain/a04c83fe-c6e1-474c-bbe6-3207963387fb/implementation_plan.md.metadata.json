@@ -1,0 +1,6 @@
+{
+  "summary":  "Implementation plan for Remote ADB Terminal & Controller for Android TV with pure Kotlin dadb backend, dual mDNS and subnet auto-discovery, interactive shell, remote app manager, and floating TV D-pad remote.",
+  "updatedAt":  "2026-10-27T21:03:27.227848770Z",
+  "requestFeedback":  true,
+  "userFacing":  true
+}

@@ -1,0 +1,6 @@
+{
+  "name": "AdbTV Remote",
+  "description": "Wireless ADB Terminal and TV Remote Control for Android TV devices using pure Kotlin dadb backend",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
