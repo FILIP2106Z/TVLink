@@ -26,25 +26,47 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
+      - name: Accept Android SDK Licenses
+        run: |
+          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses || true
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: false
 
-      - name: Ensure Executable Permissions
+      - name: Prepare Keystores for CI Build
         run: |
-          if [ -f gradlew ]; then
-            chmod +x gradlew
-          else
-            gradle wrapper
-            chmod +x gradlew
+          # Generate debug.keystore if not present in repository (excluded by .gitignore)
+          if [ ! -f debug.keystore ]; then
+            echo "Generating debug.keystore for CI..."
+            keytool -genkeypair -v -keystore debug.keystore \
+              -storepass android -alias androiddebugkey -keypass android \
+              -keyalg RSA -keysize 2048 -validity 10000 \
+              -dname "CN=Android Debug,O=Android,C=US"
           fi
 
+          # Generate release upload keystore for CI release build
+          if [ ! -f my-upload-key.jks ]; then
+            echo "Generating my-upload-key.jks for CI..."
+            keytool -genkeypair -v -keystore my-upload-key.jks \
+              -storepass android -alias upload -keypass android \
+              -keyalg RSA -keysize 2048 -validity 10000 \
+              -dname "CN=Android Release,O=Android,C=US"
+          fi
+
+          chmod +x gradlew || true
+
       - name: Build Debug APK
+        env:
+          STORE_PASSWORD: android
+          KEY_PASSWORD: android
         run: ./gradlew assembleDebug --no-daemon --stacktrace
 
       - name: Build Release APK
+        env:
+          STORE_PASSWORD: android
+          KEY_PASSWORD: android
         run: ./gradlew assembleRelease --no-daemon --stacktrace
 
       - name: Upload Debug APK Artifact
