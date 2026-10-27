@@ -5,6 +5,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.adb.AdbManager
 import com.example.discovery.DeviceDiscoveryService
+import com.example.downloader.ApkDownloader
 import com.example.model.AdbCommandLog
 import com.example.model.ConnectionState
 import com.example.model.DeviceConnection
@@ -29,6 +30,7 @@ class AdbViewModel(application: Application) : AndroidViewModel(application) {
     private val adbManager = AdbManager(application)
     private val discoveryService = DeviceDiscoveryService(application)
     private val recentStore = RecentDevicesStore(application)
+    private val apkDownloader = ApkDownloader(application)
 
     val connectionState: StateFlow<ConnectionState> = adbManager.connectionState
     val discoveredDevices: StateFlow<List<DiscoveredDevice>> = discoveryService.discoveredDevices
@@ -262,6 +264,67 @@ class AdbViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             val success = adbManager.rebootDevice(mode)
             _statusMessage.value = if (success) "Reboot command sent to TV" else "Failed to send reboot"
+        }
+    }
+
+    fun downloadAndInstallApk(url: String) {
+        viewModelScope.launch {
+            _statusMessage.value = "Starting download from GitHub / URL..."
+            val result = apkDownloader.downloadApk(url) { progress ->
+                _statusMessage.value = "Downloading APK: $progress%"
+            }
+            result.onSuccess { apkFile ->
+                _statusMessage.value = "Installing downloaded APK on TV..."
+                val installResult = adbManager.installApk(apkFile)
+                apkFile.delete()
+                installResult.onSuccess {
+                    _statusMessage.value = "APK installed successfully on Android TV!"
+                    refreshApps()
+                }.onFailure { err ->
+                    _statusMessage.value = "Install failed: ${err.message}"
+                }
+            }.onFailure { error ->
+                _statusMessage.value = "Download failed: ${error.message}"
+            }
+        }
+    }
+
+    fun setDensity(dpi: Int) {
+        viewModelScope.launch {
+            val log = adbManager.executeShell("wm density $dpi")
+            _statusMessage.value = if (!log.isError) "Display density set to ${dpi} DPI" else "Failed to set density"
+        }
+    }
+
+    fun resetDensity() {
+        viewModelScope.launch {
+            val log = adbManager.executeShell("wm density reset")
+            _statusMessage.value = if (!log.isError) "Display density reset to default" else "Failed to reset density"
+        }
+    }
+
+    fun setStayAwake(enabled: Boolean) {
+        viewModelScope.launch {
+            val value = if (enabled) 3 else 0
+            val log = adbManager.executeShell("settings put global stay_on_while_plugged_in $value")
+            _statusMessage.value = if (!log.isError) {
+                if (enabled) "Stay Awake enabled on TV" else "Stay Awake disabled"
+            } else {
+                "Failed to update Stay Awake"
+            }
+        }
+    }
+
+    fun setPrivateDns(dns: String) {
+        viewModelScope.launch {
+            if (dns == "off") {
+                adbManager.executeShell("settings put global private_dns_mode off")
+                _statusMessage.value = "Private DNS disabled on TV"
+            } else {
+                adbManager.executeShell("settings put global private_dns_mode hostname")
+                val log = adbManager.executeShell("settings put global private_dns_specifier $dns")
+                _statusMessage.value = if (!log.isError) "Private DNS set to $dns" else "Failed to set Private DNS"
+            }
         }
     }
 

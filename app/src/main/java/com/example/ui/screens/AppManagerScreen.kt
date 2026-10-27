@@ -88,6 +88,7 @@ fun AppManagerScreen(
     onDisableApp: (String) -> Unit,
     onEnableApp: (String) -> Unit,
     onInstallApk: (Uri) -> Unit,
+    onDownloadAndInstallApk: (String) -> Unit,
     onSpeedBoost: (Float) -> Unit,
     onKillTasks: () -> Unit,
     modifier: Modifier = Modifier
@@ -97,6 +98,8 @@ fun AppManagerScreen(
     var appToConfirmUninstall by remember { mutableStateOf<InstalledApp?>(null) }
     var appToConfirmDisable by remember { mutableStateOf<InstalledApp?>(null) }
     var showSpeedDialog by remember { mutableStateOf(false) }
+    var showUrlSideloadDialog by remember { mutableStateOf(false) }
+    var customApkUrl by remember { mutableStateOf("") }
 
     val apkPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
@@ -125,12 +128,12 @@ fun AppManagerScreen(
             .padding(horizontal = 16.dp)
             .testTag("app_manager_screen")
     ) {
-        // Quick Action Bar: Sideload APK & TV Speed Booster
+        // Quick Action Bar: Local APK, GitHub/URL Sideload, TV Speed Booster
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(top = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             ElevatedButton(
                 onClick = { apkPickerLauncher.launch("application/vnd.android.package-archive") },
@@ -144,10 +147,22 @@ fun AppManagerScreen(
                 Icon(
                     imageVector = Icons.Default.FileUpload,
                     contentDescription = null,
-                    modifier = Modifier.size(18.dp)
+                    modifier = Modifier.size(16.dp)
                 )
-                Spacer(modifier = Modifier.width(6.dp))
-                Text("Sideload APK", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                Spacer(modifier = Modifier.width(4.dp))
+                Text("File APK", fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+            }
+
+            ElevatedButton(
+                onClick = { showUrlSideloadDialog = true },
+                enabled = isConnected,
+                modifier = Modifier
+                    .weight(1.2f)
+                    .height(44.dp)
+                    .testTag("url_sideload_button"),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Text("GitHub / Web APK", fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
             }
 
             OutlinedButton(
@@ -162,11 +177,11 @@ fun AppManagerScreen(
                 Icon(
                     imageVector = Icons.Default.Speed,
                     contentDescription = null,
-                    modifier = Modifier.size(18.dp),
+                    modifier = Modifier.size(16.dp),
                     tint = MaterialTheme.colorScheme.primary
                 )
-                Spacer(modifier = Modifier.width(6.dp))
-                Text("TV Booster", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                Spacer(modifier = Modifier.width(4.dp))
+                Text("Booster", fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
             }
         }
 
@@ -471,6 +486,87 @@ fun AppManagerScreen(
             confirmButton = {
                 TextButton(onClick = { showSpeedDialog = false }) {
                     Text("Close")
+                }
+            }
+        )
+    }
+
+    // Sideload from GitHub / URL Dialog (like Obtainium)
+    if (showUrlSideloadDialog) {
+        AlertDialog(
+            onDismissRequest = { showUrlSideloadDialog = false },
+            icon = { Icon(Icons.Default.FileUpload, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
+            title = { Text("Download & Install from GitHub / URL") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(
+                        "Paste any direct APK link or GitHub Release asset URL to download and install directly on your Android TV:",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+
+                    OutlinedTextField(
+                        value = customApkUrl,
+                        onValueChange = { customApkUrl = it },
+                        placeholder = { Text("https://github.com/.../app.apk") },
+                        label = { Text("APK URL") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp)
+                    )
+
+                    Text(
+                        "Popular Android TV Apps (1-Tap):",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+
+                    OutlinedButton(
+                        onClick = {
+                            customApkUrl = "https://github.com/yuliskov/SmartTube/releases/latest/download/smarttube_stable.apk"
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Text("📺 SmartTube (Stable Release)")
+                    }
+
+                    OutlinedButton(
+                        onClick = {
+                            customApkUrl = "https://github.com/Gathin23/cleanyourtv/releases/latest/download/app-release.apk"
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Text("🧹 CleanYourTV Launcher")
+                    }
+
+                    OutlinedButton(
+                        onClick = {
+                            customApkUrl = "https://github.com/nova-video-player/aos-AVP/releases/latest/download/NovaVideoPlayer-universal-release.apk"
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Text("🎬 Nova Video Player")
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (customApkUrl.isNotBlank()) {
+                            onDownloadAndInstallApk(customApkUrl.trim())
+                            showUrlSideloadDialog = false
+                        }
+                    },
+                    enabled = customApkUrl.isNotBlank()
+                ) {
+                    Text("Download & Sideload")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showUrlSideloadDialog = false }) {
+                    Text("Cancel")
                 }
             }
         )

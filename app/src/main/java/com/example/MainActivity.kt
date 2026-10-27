@@ -21,6 +21,7 @@ import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.CastConnected
 import androidx.compose.material.icons.filled.SettingsRemote
 import androidx.compose.material.icons.filled.Terminal
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Tv
 import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -57,6 +58,7 @@ import com.example.ui.AdbViewModel
 import com.example.ui.components.TvRemoteSheet
 import com.example.ui.screens.AppManagerScreen
 import com.example.ui.screens.ConnectionScreen
+import com.example.ui.screens.SettingsManagerScreen
 import com.example.ui.screens.TerminalScreen
 import com.example.ui.theme.MyApplicationTheme
 import com.example.ui.theme.TerminalGreen
@@ -226,6 +228,19 @@ class MainActivity : ComponentActivity() {
                                 label = { Text("TV Apps") },
                                 modifier = Modifier.testTag("nav_apps_tab")
                             )
+
+                            NavigationBarItem(
+                                selected = selectedTab == 3,
+                                onClick = { selectedTab = 3 },
+                                icon = {
+                                    Icon(
+                                        imageVector = Icons.Default.Tune,
+                                        contentDescription = "Settings & Tweaks"
+                                    )
+                                },
+                                label = { Text("Settings") },
+                                modifier = Modifier.testTag("nav_settings_tab")
+                            )
                         }
                     },
                     floatingActionButton = {
@@ -288,8 +303,19 @@ class MainActivity : ComponentActivity() {
                                 onDisableApp = { pkg -> viewModel.disableApp(pkg) },
                                 onEnableApp = { pkg -> viewModel.enableApp(pkg) },
                                 onInstallApk = { uri -> viewModel.installApkFromUri(uri) },
+                                onDownloadAndInstallApk = { url -> viewModel.downloadAndInstallApk(url) },
                                 onSpeedBoost = { scale -> viewModel.setSpeedBoost(scale) },
                                 onKillTasks = { viewModel.killBackgroundProcesses() }
+                            )
+
+                            3 -> SettingsManagerScreen(
+                                connectionState = connectionState,
+                                onExecuteCommand = { cmd -> viewModel.executeCommand(cmd) },
+                                onSetSpeedBoost = { scale -> viewModel.setSpeedBoost(scale) },
+                                onSetStayAwake = { stayAwake -> viewModel.setStayAwake(stayAwake) },
+                                onSetDns = { dns -> viewModel.setPrivateDns(dns) },
+                                onSetDensity = { dpi -> viewModel.setDensity(dpi) },
+                                onResetDensity = { viewModel.resetDensity() }
                             )
                         }
 
