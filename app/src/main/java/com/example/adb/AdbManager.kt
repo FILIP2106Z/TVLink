@@ -213,6 +213,9 @@ class AdbManager(private val context: Context) {
                 val disabledResponse = dadb.shell("pm list packages -d")
                 val disabledPkgs = parsePackages(disabledResponse.allOutput)
 
+                // Query packages that have native TV Leanback banners
+                val leanbackPkgs = queryLeanbackPackages(dadb)
+
                 // Fetch 3rd party user installed apps
                 val userPkgsResponse = dadb.shell("pm list packages -3")
                 val userPkgs = parsePackages(userPkgsResponse.allOutput)
@@ -221,7 +224,8 @@ class AdbManager(private val context: Context) {
                         InstalledApp(
                             packageName = pkg,
                             isSystem = false,
-                            isDisabled = disabledPkgs.contains(pkg)
+                            isDisabled = disabledPkgs.contains(pkg),
+                            isLeanback = leanbackPkgs.contains(pkg)
                         )
                     )
                 }
@@ -236,7 +240,8 @@ class AdbManager(private val context: Context) {
                                 InstalledApp(
                                     packageName = pkg,
                                     isSystem = true,
-                                    isDisabled = disabledPkgs.contains(pkg)
+                                    isDisabled = disabledPkgs.contains(pkg),
+                                    isLeanback = leanbackPkgs.contains(pkg)
                                 )
                             )
                         }
@@ -248,6 +253,29 @@ class AdbManager(private val context: Context) {
 
             apps.sortedBy { it.label.lowercase() }
         }
+
+    private fun queryLeanbackPackages(dadb: Dadb): Set<String> {
+        val result = mutableSetOf<String>()
+        try {
+            val resp = dadb.shell("cmd package query-intent-activities -c android.intent.category.LEANBACK_LAUNCHER")
+            val output = if (resp.exitCode == 0) resp.allOutput else {
+                dadb.shell("pm query-intent-activities -c android.intent.category.LEANBACK_LAUNCHER").allOutput
+            }
+            output.lines().forEach { line ->
+                val clean = line.trim()
+                if (clean.contains("packageName=", ignoreCase = true)) {
+                    val pkg = clean.substringAfter("packageName=").substringBefore(" ").trim()
+                    if (pkg.isNotBlank()) result.add(pkg)
+                } else if (clean.contains("/")) {
+                    val pkg = clean.substringBefore("/").trim()
+                    if (pkg.contains(".")) result.add(pkg)
+                }
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to query leanback packages", e)
+        }
+        return result
+    }
 
     private fun parsePackages(output: String): Set<String> {
         val result = mutableSetOf<String>()

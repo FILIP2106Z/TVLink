@@ -716,6 +716,30 @@ private fun AppItemCard(
                                 }
                             )
                         }
+
+                        if (!app.isSystem && !app.isDisabled) {
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Surface(
+                                shape = RoundedCornerShape(4.dp),
+                                color = if (app.isLeanback) {
+                                    MaterialTheme.colorScheme.surfaceVariant
+                                } else {
+                                    MaterialTheme.colorScheme.primaryContainer
+                                }
+                            ) {
+                                Text(
+                                    text = if (app.isLeanback) "TV Native" else "Mobile App",
+                                    fontSize = 10.sp,
+                                    fontWeight = if (!app.isLeanback) FontWeight.Bold else FontWeight.Normal,
+                                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp),
+                                    color = if (app.isLeanback) {
+                                        MaterialTheme.colorScheme.onSurfaceVariant
+                                    } else {
+                                        MaterialTheme.colorScheme.primary
+                                    }
+                                )
+                            }
+                        }
                     }
 
                     Text(
