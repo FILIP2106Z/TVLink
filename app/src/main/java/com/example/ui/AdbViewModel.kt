@@ -63,6 +63,12 @@ class AdbViewModel(application: Application) : AndroidViewModel(application) {
     private val _statusMessage = MutableStateFlow<String?>(null)
     val statusMessage: StateFlow<String?> = _statusMessage.asStateFlow()
 
+    private val _deviceAbi = MutableStateFlow<String?>("Unknown")
+    val deviceAbi: StateFlow<String?> = _deviceAbi.asStateFlow()
+
+    private val _isTouchpadMode = MutableStateFlow(false)
+    val isTouchpadMode: StateFlow<Boolean> = _isTouchpadMode.asStateFlow()
+
     init {
         loadRecentDevices()
         loadCommandHistory()
@@ -94,6 +100,11 @@ class AdbViewModel(application: Application) : AndroidViewModel(application) {
                 recentStore.saveDevice(ip, port, deviceLabel)
                 loadRecentDevices()
                 _statusMessage.value = "Connected to $deviceLabel"
+                
+                // Fetch target TV CPU Architecture (e.g. armeabi-v7a vs arm64-v8a)
+                val abi = adbManager.getDeviceAbi()
+                _deviceAbi.value = abi
+
                 // Auto load user installed apps
                 refreshApps()
             }.onFailure { error ->
@@ -104,6 +115,7 @@ class AdbViewModel(application: Application) : AndroidViewModel(application) {
 
     fun disconnect() {
         adbManager.disconnect()
+        _deviceAbi.value = null
         _statusMessage.value = "Disconnected"
     }
 
@@ -356,6 +368,44 @@ class AdbViewModel(application: Application) : AndroidViewModel(application) {
 
     fun clearStatusMessage() {
         _statusMessage.value = null
+    }
+
+    fun toggleTouchpadMode() {
+        _isTouchpadMode.value = !_isTouchpadMode.value
+    }
+
+    fun sendTouchTap(xPercent: Float, yPercent: Float) {
+        viewModelScope.launch {
+            val (width, height) = adbManager.getDisplaySize()
+            val targetX = (width * xPercent.coerceIn(0.02f, 0.98f)).toInt()
+            val targetY = (height * yPercent.coerceIn(0.02f, 0.98f)).toInt()
+            adbManager.sendTap(targetX, targetY)
+        }
+    }
+
+    fun sendTouchSwipe(dxPercent: Float, dyPercent: Float) {
+        viewModelScope.launch {
+            val (width, height) = adbManager.getDisplaySize()
+            val centerX = width / 2
+            val centerY = height / 2
+            val endX = (centerX + width * dxPercent).toInt().coerceIn(10, width - 10)
+            val endY = (centerY + height * dyPercent).toInt().coerceIn(10, height - 10)
+            adbManager.sendSwipe(centerX, centerY, endX, endY, 200)
+        }
+    }
+
+    fun sendQuickScroll(direction: String) {
+        viewModelScope.launch {
+            val (width, height) = adbManager.getDisplaySize()
+            val centerX = width / 2
+            val centerY = height / 2
+            when (direction.lowercase()) {
+                "down" -> adbManager.sendSwipe(centerX, (height * 0.7f).toInt(), centerX, (height * 0.3f).toInt(), 250)
+                "up" -> adbManager.sendSwipe(centerX, (height * 0.3f).toInt(), centerX, (height * 0.7f).toInt(), 250)
+                "left" -> adbManager.sendSwipe((width * 0.7f).toInt(), centerY, (width * 0.3f).toInt(), centerY, 250)
+                "right" -> adbManager.sendSwipe((width * 0.3f).toInt(), centerY, (width * 0.7f).toInt(), centerY, 250)
+            }
+        }
     }
 
     override fun onCleared() {

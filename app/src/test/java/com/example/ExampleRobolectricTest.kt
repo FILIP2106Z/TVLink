@@ -34,4 +34,31 @@ class ExampleRobolectricTest {
     val updated = store.getRecentDevices()
     assertTrue(updated.any { it.ip == "192.168.1.150" && it.label == "Shield TV" })
   }
+
+  @Test
+  fun `verify adb manager install diagnostics`() {
+    val context = ApplicationProvider.getApplicationContext<Context>()
+    val manager = com.example.adb.AdbManager(context)
+
+    // Test ABI Mismatch
+    val abiDiag = manager.parseInstallFailure("Failure [INSTALL_FAILED_NO_MATCHING_ABIS: Failed to extract native libraries]")
+    assertTrue(abiDiag != null)
+    assertTrue(abiDiag!!.userFriendlyMessage.contains("Architecture mismatch"))
+    assertEquals(false, abiDiag.isFallbackCandidate)
+
+    // Test Insufficient Storage
+    val storageDiag = manager.parseInstallFailure("Failure [INSTALL_FAILED_INSUFFICIENT_STORAGE]")
+    assertTrue(storageDiag != null)
+    assertTrue(storageDiag!!.userFriendlyMessage.contains("Insufficient storage"))
+
+    // Test Downgrade Error
+    val downgradeDiag = manager.parseInstallFailure("Failure [INSTALL_FAILED_VERSION_DOWNGRADE]")
+    assertTrue(downgradeDiag != null)
+    assertTrue(downgradeDiag!!.userFriendlyMessage.contains("Downgrade blocked"))
+
+    // Test Timeout Fallback Candidate
+    val timeoutDiag = manager.parseInstallFailure("java.net.SocketTimeoutException: Read timed out")
+    assertTrue(timeoutDiag != null)
+    assertEquals(true, timeoutDiag!!.isFallbackCandidate)
+  }
 }

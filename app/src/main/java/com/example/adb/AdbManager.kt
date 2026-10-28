@@ -293,14 +293,186 @@ class AdbManager(private val context: Context) {
         !res.isError && (res.output.contains("enabled", ignoreCase = true) || res.output.contains("new state", ignoreCase = true))
     }
 
-    suspend fun installApk(file: File): Result<String> = withContext(Dispatchers.IO) {
-        val dadb = currentDadb ?: return@withContext Result.failure(IllegalStateException("Not connected"))
+    data class InstallDiagnostic(
+        val userFriendlyMessage: String,
+        val isFallbackCandidate: Boolean
+    )
+
+    fun parseInstallFailure(rawOutput: String): InstallDiagnostic? {
+        val upper = rawOutput.uppercase()
+        return when {
+            upper.contains("INSTALL_FAILED_NO_MATCHING_ABIS") -> InstallDiagnostic(
+                "Architecture mismatch (INSTALL_FAILED_NO_MATCHING_ABIS). This APK was compiled for a different CPU (e.g. 64-bit on a 32-bit TV). Please install the armeabi-v7a (32-bit) or universal APK.",
+                isFallbackCandidate = false
+            )
+            upper.contains("INSTALL_FAILED_INSUFFICIENT_STORAGE") -> InstallDiagnostic(
+                "Insufficient storage on TV (INSTALL_FAILED_INSUFFICIENT_STORAGE). Free up internal storage in Android TV Settings -> Storage.",
+                isFallbackCandidate = false
+            )
+            upper.contains("INSTALL_FAILED_VERSION_DOWNGRADE") -> InstallDiagnostic(
+                "Downgrade blocked (INSTALL_FAILED_VERSION_DOWNGRADE). The TV has a newer version installed. Uninstall the app first to downgrade.",
+                isFallbackCandidate = false
+            )
+            upper.contains("INSTALL_FAILED_UPDATE_INCOMPATIBLE") || upper.contains("INSTALL_PARSE_FAILED_INCONSISTENT_CERTIFICATES") -> InstallDiagnostic(
+                "Signature mismatch (INSTALL_FAILED_UPDATE_INCOMPATIBLE). The installed version was signed with a different key. Please uninstall the current app first.",
+                isFallbackCandidate = false
+            )
+            upper.contains("INSTALL_FAILED_TEST_ONLY") -> InstallDiagnostic(
+                "Package flagged as test-only (INSTALL_FAILED_TEST_ONLY). TVLink has added -t flag to bypass this.",
+                isFallbackCandidate = true
+            )
+            upper.contains("INSTALL_FAILED_OLDER_SDK") -> InstallDiagnostic(
+                "App requires a newer Android version than your TV runs (INSTALL_FAILED_OLDER_SDK).",
+                isFallbackCandidate = false
+            )
+            upper.contains("INSTALL_FAILED_CONFLICTING_PROVIDER") -> InstallDiagnostic(
+                "Conflicting content provider (INSTALL_FAILED_CONFLICTING_PROVIDER). Another app is sharing the same authority.",
+                isFallbackCandidate = false
+            )
+            upper.contains("INSTALL_PARSE_FAILED_NOT_APK") || upper.contains("INSTALL_FAILED_INVALID_APK") -> InstallDiagnostic(
+                "Invalid or corrupted APK file. Check the download source.",
+                isFallbackCandidate = false
+            )
+            upper.contains("INSTALL_PARSE_FAILED_NO_CERTIFICATES") -> InstallDiagnostic(
+                "Unsigned APK. Android TV requires APKs to be cryptographically signed.",
+                isFallbackCandidate = false
+            )
+            upper.contains("INSTALL_FAILED_USER_RESTRICTED") -> InstallDiagnostic(
+                "Installation restricted by TV system policy or parental controls.",
+                isFallbackCandidate = false
+            )
+            upper.contains("BROKEN PIPE") || upper.contains("CONNECTION RESET") || upper.contains("TIMEOUT") || upper.contains("TIMED OUT") -> InstallDiagnostic(
+                "Streaming transfer timed out over Wi-Fi socket.",
+                isFallbackCandidate = true
+            )
+            else -> null
+        }
+    }
+
+    suspend fun getDeviceAbi(): String = withContext(Dispatchers.IO) {
+        val dadb = currentDadb ?: return@withContext "Unknown"
         try {
-            dadb.install(file)
-            Result.success("APK installed successfully on Android TV")
+            val abi = dadb.shell("getprop ro.product.cpu.abi").allOutput.trim()
+            val abilist = dadb.shell("getprop ro.product.cpu.abilist").allOutput.trim()
+            when {
+                abi.contains("arm64", ignoreCase = true) -> "arm64-v8a (64-bit)"
+                abi.contains("armeabi-v7a", ignoreCase = true) || abi.contains("arm", ignoreCase = true) -> "armeabi-v7a (32-bit)"
+                abi.contains("x86_64", ignoreCase = true) -> "x86_64 (64-bit)"
+                abi.contains("x86", ignoreCase = true) -> "x86 (32-bit)"
+                abi.isNotBlank() -> abi
+                abilist.isNotBlank() -> abilist.split(",").firstOrNull()?.trim() ?: "Unknown"
+                else -> "Unknown"
+            }
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to install APK", e)
-            Result.failure(e)
+            Log.w(TAG, "Error fetching device ABI", e)
+            "Unknown"
+        }
+    }
+
+    suspend fun sendTap(x: Int, y: Int): Boolean = withContext(Dispatchers.IO) {
+        val dadb = currentDadb ?: return@withContext false
+        try {
+            val res = dadb.shell("input tap $x $y")
+            res.exitCode == 0
+        } catch (e: Exception) {
+            Log.e(TAG, "Error sending tap ($x, $y)", e)
+            false
+        }
+    }
+
+    suspend fun sendSwipe(x1: Int, y1: Int, x2: Int, y2: Int, durationMs: Int = 250): Boolean = withContext(Dispatchers.IO) {
+        val dadb = currentDadb ?: return@withContext false
+        try {
+            val res = dadb.shell("input swipe $x1 $y1 $x2 $y2 $durationMs")
+            res.exitCode == 0
+        } catch (e: Exception) {
+            Log.e(TAG, "Error sending swipe", e)
+            false
+        }
+    }
+
+    suspend fun getDisplaySize(): Pair<Int, Int> = withContext(Dispatchers.IO) {
+        val dadb = currentDadb ?: return@withContext Pair(1920, 1080)
+        try {
+            val res = dadb.shell("wm size").allOutput
+            val regex = Regex("""(?:Physical|Override) size: (\d+)x(\d+)""")
+            val match = regex.findAll(res).lastOrNull()
+            if (match != null) {
+                val w = match.groupValues[1].toInt()
+                val h = match.groupValues[2].toInt()
+                Pair(w, h)
+            } else {
+                Pair(1920, 1080)
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Error getting display size", e)
+            Pair(1920, 1080)
+        }
+    }
+
+    suspend fun installApk(file: File): Result<String> = withContext(Dispatchers.IO) {
+        val dadb = currentDadb ?: return@withContext Result.failure(IllegalStateException("Not connected to Android TV"))
+        if (!file.exists() || file.length() == 0L) {
+            return@withContext Result.failure(IllegalArgumentException("APK file is missing or empty"))
+        }
+
+        // Flags:
+        // -r: Replace existing application
+        // -d: Allow version code downgrade
+        // -t: Allow test packages
+        // -g: Grant all runtime permissions (vital for mobile apps on TV)
+        val installFlags = arrayOf("-r", "-d", "-t", "-g")
+
+        // Stage 1: Try direct streaming install with flags
+        Log.d(TAG, "Stage 1: Attempting streaming install with flags: ${installFlags.joinToString(" ")}")
+        try {
+            dadb.install(file, *installFlags)
+            Log.d(TAG, "Stage 1 direct install succeeded")
+            return@withContext Result.success("APK installed successfully on Android TV")
+        } catch (stage1Error: Exception) {
+            val s1Msg = stage1Error.message ?: ""
+            Log.w(TAG, "Stage 1 direct streaming install failed or timed out: $s1Msg. Falling back to Stage 2 (push & pm install)...")
+            
+            val diagnostic = parseInstallFailure(s1Msg)
+            if (diagnostic != null && !diagnostic.isFallbackCandidate) {
+                return@withContext Result.failure(Exception(diagnostic.userFriendlyMessage, stage1Error))
+            }
+        }
+
+        // Stage 2: Fallback to push APK to /data/local/tmp and run pm install
+        val remoteTmpPath = "/data/local/tmp/tvlink_install_${System.currentTimeMillis()}.apk"
+        try {
+            Log.d(TAG, "Stage 2: Pushing APK to $remoteTmpPath...")
+            dadb.push(file, remoteTmpPath, 420, System.currentTimeMillis() / 1000)
+            
+            Log.d(TAG, "Stage 2: Executing pm install -r -d -t -g $remoteTmpPath...")
+            val installResponse = dadb.shell("pm install -r -d -t -g $remoteTmpPath")
+            val output = installResponse.allOutput.trim()
+            Log.d(TAG, "Stage 2 pm install output: $output (exitCode=${installResponse.exitCode})")
+
+            // Always cleanup remote temp file
+            try {
+                dadb.shell("rm -f $remoteTmpPath")
+            } catch (cleanupEx: Exception) {
+                Log.w(TAG, "Failed to clean up $remoteTmpPath", cleanupEx)
+            }
+
+            if (installResponse.exitCode == 0 && output.contains("Success", ignoreCase = true)) {
+                return@withContext Result.success("APK installed successfully on Android TV")
+            } else {
+                val diagnostic = parseInstallFailure(output)
+                val userMsg = diagnostic?.userFriendlyMessage ?: "Installation failed: $output"
+                return@withContext Result.failure(Exception(userMsg))
+            }
+        } catch (stage2Error: Exception) {
+            try {
+                dadb.shell("rm -f $remoteTmpPath")
+            } catch (_: Exception) {}
+            
+            Log.e(TAG, "Stage 2 install failed", stage2Error)
+            val diagnostic = parseInstallFailure(stage2Error.message ?: "")
+            val userMsg = diagnostic?.userFriendlyMessage ?: (stage2Error.message ?: "Installation failed")
+            return@withContext Result.failure(Exception(userMsg, stage2Error))
         }
     }
 

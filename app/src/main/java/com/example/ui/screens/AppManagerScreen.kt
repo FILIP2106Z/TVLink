@@ -78,6 +78,7 @@ fun AppManagerScreen(
     isLoading: Boolean,
     filter: AppFilter,
     searchQuery: String,
+    deviceAbi: String? = null,
     onFilterChange: (AppFilter) -> Unit,
     onSearchChange: (String) -> Unit,
     onRefresh: () -> Unit,
@@ -182,6 +183,46 @@ fun AppManagerScreen(
                 )
                 Spacer(modifier = Modifier.width(4.dp))
                 Text("Booster", fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+            }
+        }
+
+        // TV Architecture & Mobile App Compatibility Bar
+        if (isConnected && !deviceAbi.isNullOrBlank()) {
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.4f),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 8.dp)
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Surface(
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.secondary,
+                            modifier = Modifier.size(8.dp)
+                        ) {}
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Column {
+                            Text(
+                                text = "TV Architecture: $deviceAbi",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer
+                            )
+                            Text(
+                                text = "Install flags active: -r (replace) -d (downgrade) -t (test) -g (auto-grant mobile permissions)",
+                                style = MaterialTheme.typography.bodySmall,
+                                fontSize = 10.sp,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.8f)
+                            )
+                        }
+                    }
+                }
             }
         }
 
@@ -499,6 +540,22 @@ fun AppManagerScreen(
             title = { Text("Download & Install from GitHub / URL") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    if (!deviceAbi.isNullOrBlank()) {
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                text = "TV CPU: $deviceAbi. Tip: For standard mobile apps, select universal or $deviceAbi APK files.",
+                                style = MaterialTheme.typography.bodySmall,
+                                fontSize = 11.sp,
+                                modifier = Modifier.padding(8.dp),
+                                color = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                        }
+                    }
+
                     Text(
                         "Paste any direct APK link or GitHub Release asset URL to download and install directly on your Android TV:",
                         style = MaterialTheme.typography.bodySmall

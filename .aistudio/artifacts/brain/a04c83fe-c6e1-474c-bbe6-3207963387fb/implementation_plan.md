@@ -1,92 +1,111 @@
-# Rebranding Plan: TVLink
+# Reliable APK Installer & Mobile App TV Compatibility
 
-A complete visual and identity rebrand of the application to **TVLink**, featuring clean 2024 Google Material You aesthetics, a simplified minimalist TV & remote icon, and concise, human-readable documentation.
+A comprehensive architectural plan to resolve APK installation failures, add robust multi-stage ADB installation (`dadb.push` + `pm install -r -d -t -g`), detailed diagnostic feedback, and dedicated support for running and navigating standard mobile Android apps on Android TV.
 
 ## User Review & Critical Decisions
 
 > [!IMPORTANT]
 > The following user preferences were confirmed during clarification and will be implemented:
 
-- **Confirmed Decision 1 (Brand Name)**: The app is officially named **TVLink**. This replaces all occurrences of `AdbCommander` across `metadata.json`, `strings.xml`, `settings.gradle.kts`, `MainActivity.kt`, and test files.
-- **Confirmed Decision 2 (2024 Google Icon Style)**: The launcher icon will be regenerated with a **minimalist rounded squircle TV silhouette with a clean remote pad motif**, adopting the flat, bold geometric styling of 2024 Google apps.
-- **Confirmed Decision 3 (Color Theme)**: Full dynamic Material You color system throughout the application with **Emerald Green** (`#00C853` / `#00E676`) and deep slate (`#0B0F19`) as the primary fallback accents.
-- **Confirmed Decision 4 (Concise Documentation)**: The project `README.md` and repository description will be streamlined into simple, crisp sections with clear instructions for Obtainium and quick setup.
+- **Confirmed Decision 1 (Installation Root Cause & Strategy)**:
+  - APK installs on Android TV frequently time out or fail over ADB sockets because of buffer limits, missing `-r -d -t -g` flags, or architecture incompatibilities (e.g. attempting to install 64-bit `arm64-v8a` on 32-bit `armeabi-v7a` TVs like Chromecast with Google TV HD).
+  - We will replace the single-method install with a **two-stage push-and-install engine**:
+    1. Direct ADB streaming install (`dadb.install(apkFile, "-r", "-d", "-t", "-g")`).
+    2. Fallback to `dadb.push(apkFile, "/data/local/tmp/app.apk")` followed by `pm install -r -d -t -g /data/local/tmp/app.apk`.
+    3. Parsing and displaying exact error diagnostics (`INSTALL_FAILED_NO_MATCHING_ABIS`, `INSTALL_FAILED_INSUFFICIENT_STORAGE`, etc.) instead of vague timeouts.
+- **Confirmed Decision 2 (Mobile App Support on TV)**:
+  - Standard mobile apps do not appear on the Android TV Leanback launcher home screen. TVLink will tag them with a **[Mobile App]** badge and provide a 1-tap **Direct TV Launcher** (`monkey -p <pkg> -c android.intent.category.LAUNCHER 1`).
+  - Mobile apps require permissions that cannot be accepted via D-pad; the `-g` flag grants all permissions at install time.
+  - In the floating remote, we will add a **Virtual Cursor / Touchpad Mode** allowing users to send directional cursor taps (`input tap X Y`) and screen swipes (`input swipe`) to operate mobile interfaces easily.
 
 ---
 
 ## 1. Overview & Core Concept
 
-- **What It Does**: **TVLink** wirelessly connects your phone to Android TV and Google TV devices over local Wi-Fi. It gives you a fast TV remote control, instant package manager (with APK sideloading and debloating), live ADB terminal, and hidden TV settings tweaker—with zero PC, root, or ADB server required.
-- **Target Audience**: Anyone with an Android TV who wants an easy, powerful remote control and tool to manage TV apps and speed without complicated setup.
-- **Key Value**: Simple, clean, fast, and fully automated via GitHub Releases and Obtainium.
+- **What It Does**: Resolves all APK installation timeouts and crashes when sideloading onto Android TV devices. Enhances TVLink to seamlessly handle both native Android TV apps and standard smartphone apps, including automatic permission grants (`-g`), Leanback bypass launching, and virtual cursor navigation.
+- **Target Persona**: Android TV users wishing to sideload third-party apps, emulators, streaming APKs, and mobile utilities onto their smart TVs without root or a computer.
+- **Key Value**: 100% reliable installation with transparent error reporting and full usability of touch-oriented mobile apps on large TV displays.
 
 ---
 
 ## 2. User Experience & Visual Design
 
-### Visual Identity & Theme
-- **App Name**: **TVLink**
-- **Short Tagline / Main Description**: *"Wireless remote control, app manager, and ADB terminal for Android TV."*
-- **Icon Design**:
-  - Clean 2024 Google Material You aesthetic.
-  - A clean rounded squircle TV screen with Emerald Green wireless signal and subtle remote D-pad silhouette.
-  - Consistent solid background (`#0F172A`) with adaptive layer-list and mipmap fallbacks across all resolutions.
-- **UI Styling**:
-  - Edge-to-edge Material 3 layout respecting system insets.
-  - Emerald Green and Cyan accents for active connection status, status pills, and action buttons.
-  - 4 clean navigation tabs: **Connection**, **Terminal**, **TV Apps**, and **Settings**.
+### Key Flows
+1. **Sideloading an APK**:
+   - User picks a local file or enters a GitHub link.
+   - TVLink uploads with a visual progress bar.
+   - If the TV accepts it, a success toast appears with an immediate **"Launch on TV"** action button.
+   - If the TV rejects it (e.g., mismatched CPU ABI or low storage), TVLink displays an explanation (e.g., *"Incompatible architecture: Your TV requires 32-bit armeabi-v7a"*).
+2. **Managing & Launching Mobile Apps**:
+   - The **TV Apps** tab displays clear badges: `[TV Native]` vs `[Mobile App]`.
+   - Tapping **Launch** instantly fires the app on the TV even if hidden from the stock TV launcher.
+3. **Navigating Mobile Apps via Remote**:
+   - The floating TV Remote includes a toggle between **D-pad Mode** (standard TV controls) and **Mouse / Cursor Mode** (sends directional cursor taps and scroll swipes).
 
 ---
 
 ## 3. Key Product Decisions & Trade-Offs
 
-- **Decision 1: Full Platform Sync**:
-  - *Chosen Approach*: Update `metadata.json`, `app/src/main/res/values/strings.xml`, and `settings.gradle.kts` simultaneously to `TVLink`.
-  - *Why*: Keeps the sidebar, Android launcher label, APK bundle name, and GitHub repository description 100% unified.
-- **Decision 2: Simplified README & Obtainium Instructions**:
-  - *Chosen Approach*: Replace lengthy developer documentation with clean, bulleted setup instructions, Obtainium 1-tap install links, and simple feature cards.
-- **Decision 3: CI/CD Release Asset Naming**:
-  - *Chosen Approach*: Update `.github/workflows/build-apk.yml` to publish `TVLink-release.apk` and `TVLink-debug.apk` directly to GitHub Releases for seamless Obtainium tracking.
+- **Decision 1: Push + Package Manager vs Decompilation/Repackaging**:
+  - *Chosen Approach*: Multi-tier ADB install with `-r -d -t -g` flags, combined with TVLink's Leanback-bypass launcher and virtual cursor.
+  - *Why*: On-device APK decompilation, modifying `AndroidManifest.xml` (injecting Leanback intent filters), and re-signing with `apksigner` on Android is extremely slow (minutes per app), breaks app signatures (preventing updates), and triggers security scanner blocks. Sideloading mobile apps directly with automated permissions and direct launching achieves the same result with 10x faster speed and zero risk of corruption.
+- **Decision 2: Automated ABI Architecture Detection**:
+  - *Chosen Approach*: Query `getprop ro.product.cpu.abi` upon connecting to warn users if they attempt to install a 64-bit APK on a 32-bit Android TV device.
 
 ---
 
-## 4. Technical Architecture & File Sync Plan
+## 4. Technical Architecture & Implementation Plan
 
 ```
 ┌────────────────────────────────────────────────────────┐
-│                      TVLink App                        │
-│                                                        │
-│  ┌──────────────┐ ┌──────────────┐ ┌────────────────┐  │
-│  │  Connection  │ │   Terminal   │ │    TV Apps     │  │
-│  └───────┬──────┘ └──────┬───────┘ └────────┬───────┘  │
-│          │               │                  │          │
-│          └───────────────┼──────────────────┘          │
-│                          ▼                             │
-│                  ┌───────────────┐                     │
-│                  │  TV Settings  │                     │
-│                  └───────┬───────┘                     │
-│                          ▼                             │
-│             Floating Virtual TV Remote                 │
-└──────────────────────────┬─────────────────────────────┘
-                           │
-                           ▼
-                 dadb Pure Kotlin Engine
+│                   AppManagerScreen                     │
+│  - File Picker / GitHub URL                            │
+│  - Architecture Check Banner (e.g. armeabi-v7a)        │
+│  - TV Apps List with [TV Native] vs [Mobile App] badge │
+└──────────────────────┬─────────────────────────────────┘
+                       │
+                       ▼
+┌────────────────────────────────────────────────────────┐
+│                    AdbViewModel                        │
+│  - downloadAndInstallApk(url)                          │
+│  - installApk(file) with detailed progress & status    │
+│  - launchMobileApp(packageName)                        │
+└──────────────────────┬─────────────────────────────────┘
+                       │
+                       ▼
+┌────────────────────────────────────────────────────────┐
+│                    AdbManager                          │
+│  ┌──────────────────────────────────────────────────┐  │
+│  │ Primary: dadb.install(file, "-r", "-d", "-t", "-g")│
+│  ├──────────────────────────────────────────────────┤  │
+│  │ Fallback: dadb.push(file, "/data/local/tmp/...") │  │
+│  │           pm install -r -d -t -g /data/...       │  │
+│  │           rm /data/local/tmp/...                 │  │
+│  └──────────────────────────────────────────────────┘  │
+│  - parseInstallError(output) -> Human-readable advice  │
+│  - getDeviceAbi() -> "arm64-v8a", "armeabi-v7a", etc.  │
+│  - sendTap(x, y), sendSwipe(x1, y1, x2, y2)            │
+└────────────────────────────────────────────────────────┘
 ```
 
-### Files to Update During Execution:
-1. `metadata.json`: Name set to `TVLink`, concise description.
-2. `app/src/main/res/values/strings.xml`: `app_name` set to `TVLink`.
-3. `settings.gradle.kts`: `rootProject.name` set to `TVLink`.
-4. `app/src/main/java/com/example/MainActivity.kt`: TopAppBar title updated to `TVLink`.
-5. `app/src/test/java/com/example/ExampleRobolectricTest.kt`: Assertion updated to `TVLink`.
-6. `app-icon-generation`: Generate new 2024 Google Material squircle icon and update `ic_launcher_foreground.xml`, `ic_launcher_background.xml`, and density mipmaps.
-7. `.github/workflows/build-apk.yml`: Release asset names updated to `TVLink-release.apk` and `TVLink-debug.apk`.
-8. `README.md`: Rewritten into a clean, simple, easy-to-read guide.
+### Steps to Implement:
+1. **`AdbManager.kt`**:
+   - Overhaul `installApk`: Implement primary `dadb.install(file, "-r", "-d", "-t", "-g")` and fallback `dadb.push(...)` + `pm install`.
+   - Add detailed error code parser (`INSTALL_FAILED_NO_MATCHING_ABIS`, `INSTALL_FAILED_INSUFFICIENT_STORAGE`, etc.).
+   - Add `getDeviceAbi()` and helper for mouse touch events (`sendTap(x, y)`, `sendSwipe(...)`).
+2. **`AdbViewModel.kt`**:
+   - Expose `deviceAbi: StateFlow<String?>`.
+   - Update `installApkFromUri` and `downloadAndInstallApk` with timeout safeguards and diagnostic messaging.
+3. **`AppManagerScreen.kt`**:
+   - Display target TV CPU ABI info chip (e.g., *"TV Architecture: armeabi-v7a"*).
+   - Differentiate `isLeanback` vs mobile apps in the list.
+4. **`TvRemoteSheet.kt`**:
+   - Add a toggle for **Mouse / Cursor Mode** (sends `input tap` and `input swipe` for mobile apps).
 
 ---
 
 ## 5. Verification Plan
 
-1. **Compilation Check**: Run `compile_applet` to ensure all references compile cleanly.
-2. **Unit Test Check**: Run `:app:testDebugUnitTest` to verify string resource assertions.
-3. **Asset Verification**: Ensure all launcher icon densities are generated and `.webp` template files removed.
+1. **Compilation Check**: Verify with `compile_applet`.
+2. **Unit Test Validation**: Run `:app:testDebugUnitTest`.
+3. **Error Handling**: Ensure descriptive diagnostic messages are returned for common install failures.

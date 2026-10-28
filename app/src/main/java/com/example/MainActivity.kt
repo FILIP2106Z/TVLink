@@ -87,6 +87,8 @@ class MainActivity : ComponentActivity() {
                 val appFilter by viewModel.appFilter.collectAsState()
                 val appSearchQuery by viewModel.appSearchQuery.collectAsState()
                 val statusMessage by viewModel.statusMessage.collectAsState()
+                val deviceAbi by viewModel.deviceAbi.collectAsState()
+                val isTouchpadMode by viewModel.isTouchpadMode.collectAsState()
 
                 var selectedTab by remember { mutableIntStateOf(0) }
                 val snackbarHostState = remember { SnackbarHostState() }
@@ -293,6 +295,7 @@ class MainActivity : ComponentActivity() {
                                 isLoading = isLoadingApps,
                                 filter = appFilter,
                                 searchQuery = appSearchQuery,
+                                deviceAbi = deviceAbi,
                                 onFilterChange = { filter -> viewModel.setAppFilter(filter) },
                                 onSearchChange = { q -> viewModel.setAppSearchQuery(q) },
                                 onRefresh = { viewModel.refreshApps() },
@@ -323,6 +326,11 @@ class MainActivity : ComponentActivity() {
                         if (showRemoteSheet) {
                             TvRemoteSheet(
                                 connectionState = connectionState,
+                                isTouchpadMode = isTouchpadMode,
+                                onToggleTouchpadMode = { viewModel.toggleTouchpadMode() },
+                                onTouchTap = { xPct, yPct -> viewModel.sendTouchTap(xPct, yPct) },
+                                onTouchSwipe = { dxPct, dyPct -> viewModel.sendTouchSwipe(dxPct, dyPct) },
+                                onQuickScroll = { dir -> viewModel.sendQuickScroll(dir) },
                                 onKeyevent = { keyCode, name -> viewModel.sendKeyevent(keyCode, name) },
                                 onSendText = { text -> viewModel.sendText(text) },
                                 onDismiss = { viewModel.setRemoteSheetVisible(false) }

@@ -4,6 +4,8 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -19,8 +21,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
-import androidx.compose.material.icons.filled.FastForward
-import androidx.compose.material.icons.filled.FastRewind
+import androidx.compose.material.icons.filled.ControlCamera
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowLeft
@@ -29,6 +30,7 @@ import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.PowerSettingsNew
+import androidx.compose.material.icons.filled.TouchApp
 import androidx.compose.material.icons.filled.VolumeDown
 import androidx.compose.material.icons.filled.VolumeMute
 import androidx.compose.material.icons.filled.VolumeUp
@@ -37,9 +39,8 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledIconButton
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
@@ -58,6 +59,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -68,6 +70,11 @@ import com.example.model.ConnectionState
 @Composable
 fun TvRemoteSheet(
     connectionState: ConnectionState,
+    isTouchpadMode: Boolean = false,
+    onToggleTouchpadMode: () -> Unit = {},
+    onTouchTap: (Float, Float) -> Unit = { _, _ -> },
+    onTouchSwipe: (Float, Float) -> Unit = { _, _ -> },
+    onQuickScroll: (String) -> Unit = {},
     onKeyevent: (Int, String) -> Unit,
     onSendText: (String) -> Unit,
     onDismiss: () -> Unit
@@ -75,6 +82,7 @@ fun TvRemoteSheet(
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var textInput by remember { mutableStateOf("") }
     val isConnected = connectionState is ConnectionState.Connected
+    var showPowerDialog by remember { mutableStateOf(false) }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -114,9 +122,43 @@ fun TvRemoteSheet(
                 }
             }
 
-            Spacer(modifier = Modifier.height(20.dp))
+            // Mode Selector: D-Pad vs Touchpad (Mouse for Mobile Apps)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 12.dp),
+                horizontalArrangement = Arrangement.Center
+            ) {
+                FilterChip(
+                    selected = !isTouchpadMode,
+                    onClick = { if (isTouchpadMode) onToggleTouchpadMode() },
+                    label = { Text("D-Pad") },
+                    leadingIcon = {
+                        Icon(
+                            imageVector = Icons.Default.ControlCamera,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    },
+                    shape = RoundedCornerShape(12.dp)
+                )
+                Spacer(modifier = Modifier.width(12.dp))
+                FilterChip(
+                    selected = isTouchpadMode,
+                    onClick = { if (!isTouchpadMode) onToggleTouchpadMode() },
+                    label = { Text("Mouse / Touchpad") },
+                    leadingIcon = {
+                        Icon(
+                            imageVector = Icons.Default.TouchApp,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    },
+                    shape = RoundedCornerShape(12.dp)
+                )
+            }
 
-    var showPowerDialog by remember { mutableStateOf(false) }
+            Spacer(modifier = Modifier.height(14.dp))
 
             // Quick TV Actions Row (Power, Vol-, Mute, Vol+)
             Row(
@@ -126,7 +168,7 @@ fun TvRemoteSheet(
             ) {
                 RemoteCircleButton(
                     icon = Icons.Default.PowerSettingsNew,
-                    label = "Power / Reboot",
+                    label = "Power",
                     tint = MaterialTheme.colorScheme.error,
                     onClick = { showPowerDialog = true }
                 )
@@ -165,8 +207,7 @@ fun TvRemoteSheet(
                             }
                             Button(
                                 onClick = {
-                                    onKeyevent(26, "REBOOT") // or direct reboot
-                                    onSendText("") // trigger shell reboot
+                                    onKeyevent(26, "REBOOT")
                                     showPowerDialog = false
                                 },
                                 modifier = Modifier.fillMaxWidth(),
@@ -184,111 +225,199 @@ fun TvRemoteSheet(
                 )
             }
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(18.dp))
 
-            // D-Pad Control
-            Box(
-                modifier = Modifier
-                    .size(240.dp)
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.surfaceVariant)
-                    .border(2.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.3f), CircleShape)
-                    .testTag("tv_dpad_controller"),
-                contentAlignment = Alignment.Center
-            ) {
-                // UP (19)
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.TopCenter)
-                        .padding(top = 8.dp)
-                        .size(64.dp)
-                        .clip(CircleShape)
-                        .clickable { onKeyevent(19, "DPAD_UP") },
-                    contentAlignment = Alignment.Center
+            if (isTouchpadMode) {
+                // Virtual Touchpad Surface for Mobile Apps
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.KeyboardArrowUp,
-                        contentDescription = "Up",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(36.dp)
-                    )
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(210.dp)
+                            .clip(RoundedCornerShape(20.dp))
+                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f))
+                            .border(2.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.5f), RoundedCornerShape(20.dp))
+                            .pointerInput(Unit) {
+                                detectTapGestures(
+                                    onTap = { offset ->
+                                        val xPct = offset.x / size.width.toFloat()
+                                        val yPct = offset.y / size.height.toFloat()
+                                        onTouchTap(xPct, yPct)
+                                    }
+                                )
+                            }
+                            .pointerInput(Unit) {
+                                detectDragGestures(
+                                    onDrag = { change, dragAmount ->
+                                        change.consume()
+                                        val dxPct = dragAmount.x / size.width.toFloat()
+                                        val dyPct = dragAmount.y / size.height.toFloat()
+                                        onTouchSwipe(dxPct, dyPct)
+                                    }
+                                )
+                            }
+                            .testTag("virtual_touchpad_surface"),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(
+                                imageVector = Icons.Default.TouchApp,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(36.dp)
+                            )
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(
+                                text = "Virtual TV Touchpad",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = "Tap to Click • Drag to Swipe / Move",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+
+                    // Mobile App Navigation Shortcuts (Scroll Up, Scroll Down, Left/Right)
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 10.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedButton(
+                            onClick = { onQuickScroll("up") },
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(10.dp)
+                        ) {
+                            Text("Scroll ▲", fontSize = 11.sp)
+                        }
+                        OutlinedButton(
+                            onClick = { onQuickScroll("down") },
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(10.dp)
+                        ) {
+                            Text("Scroll ▼", fontSize = 11.sp)
+                        }
+                        Button(
+                            onClick = { onKeyevent(23, "DPAD_CENTER") },
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(10.dp)
+                        ) {
+                            Text("Click (OK)", fontSize = 11.sp)
+                        }
+                    }
                 }
-
-                // DOWN (20)
+            } else {
+                // Classic D-Pad Control
                 Box(
                     modifier = Modifier
-                        .align(Alignment.BottomCenter)
-                        .padding(bottom = 8.dp)
-                        .size(64.dp)
+                        .size(230.dp)
                         .clip(CircleShape)
-                        .clickable { onKeyevent(20, "DPAD_DOWN") },
+                        .background(MaterialTheme.colorScheme.surfaceVariant)
+                        .border(2.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.3f), CircleShape)
+                        .testTag("tv_dpad_controller"),
                     contentAlignment = Alignment.Center
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.KeyboardArrowDown,
-                        contentDescription = "Down",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(36.dp)
-                    )
-                }
+                    // UP (19)
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.TopCenter)
+                            .padding(top = 8.dp)
+                            .size(60.dp)
+                            .clip(CircleShape)
+                            .clickable { onKeyevent(19, "DPAD_UP") },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.KeyboardArrowUp,
+                            contentDescription = "Up",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(34.dp)
+                        )
+                    }
 
-                // LEFT (21)
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.CenterStart)
-                        .padding(start = 8.dp)
-                        .size(64.dp)
-                        .clip(CircleShape)
-                        .clickable { onKeyevent(21, "DPAD_LEFT") },
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.KeyboardArrowLeft,
-                        contentDescription = "Left",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(36.dp)
-                    )
-                }
+                    // DOWN (20)
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .padding(bottom = 8.dp)
+                            .size(60.dp)
+                            .clip(CircleShape)
+                            .clickable { onKeyevent(20, "DPAD_DOWN") },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.KeyboardArrowDown,
+                            contentDescription = "Down",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(34.dp)
+                        )
+                    }
 
-                // RIGHT (22)
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.CenterEnd)
-                        .padding(end = 8.dp)
-                        .size(64.dp)
-                        .clip(CircleShape)
-                        .clickable { onKeyevent(22, "DPAD_RIGHT") },
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.KeyboardArrowRight,
-                        contentDescription = "Right",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(36.dp)
-                    )
-                }
+                    // LEFT (21)
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.CenterStart)
+                            .padding(start = 8.dp)
+                            .size(60.dp)
+                            .clip(CircleShape)
+                            .clickable { onKeyevent(21, "DPAD_LEFT") },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.KeyboardArrowLeft,
+                            contentDescription = "Left",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(34.dp)
+                        )
+                    }
 
-                // CENTER / SELECT (23)
-                Box(
-                    modifier = Modifier
-                        .size(80.dp)
-                        .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.primary)
-                        .clickable { onKeyevent(23, "DPAD_CENTER") },
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = "OK",
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 18.sp,
-                        color = MaterialTheme.colorScheme.onPrimary
-                    )
+                    // RIGHT (22)
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.CenterEnd)
+                            .padding(end = 8.dp)
+                            .size(60.dp)
+                            .clip(CircleShape)
+                            .clickable { onKeyevent(22, "DPAD_RIGHT") },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.KeyboardArrowRight,
+                            contentDescription = "Right",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(34.dp)
+                        )
+                    }
+
+                    // CENTER / SELECT (23)
+                    Box(
+                        modifier = Modifier
+                            .size(76.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.primary)
+                            .clickable { onKeyevent(23, "DPAD_CENTER") },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "OK",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 17.sp,
+                            color = MaterialTheme.colorScheme.onPrimary
+                        )
+                    }
                 }
             }
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(20.dp))
 
-            // Navigation Row: Back, Home, Menu
+            // Navigation Row: Back, Home, Menu, Play/Pause
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceEvenly,
@@ -316,7 +445,7 @@ fun TvRemoteSheet(
                 )
             }
 
-            Spacer(modifier = Modifier.height(20.dp))
+            Spacer(modifier = Modifier.height(18.dp))
 
             // Text injection to TV
             Row(
