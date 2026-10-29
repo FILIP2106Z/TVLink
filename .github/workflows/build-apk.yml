@@ -79,9 +79,10 @@ jobs:
           mkdir -p release-assets
           find app/build/outputs/apk/release -name "*.apk" -exec cp {} release-assets/TVLink-v1.0.0.apk \;
           find app/build/outputs/apk/debug -name "*.apk" -exec cp {} release-assets/TVLink-v1.0.0-debug.apk \;
+          cp release-assets/TVLink-v1.0.0.apk release-assets/TVLink-latest.apk
           
           cd release-assets
-          sha256sum TVLink-v1.0.0.apk TVLink-v1.0.0-debug.apk > checksums.txt
+          sha256sum TVLink-v1.0.0.apk TVLink-v1.0.0-debug.apk TVLink-latest.apk > checksums.txt
           
           echo "Generated Checksums:"
           cat checksums.txt
@@ -108,18 +109,20 @@ jobs:
           path: release-assets/TVLink-v1.0.0.apk
           if-no-files-found: warn
 
-      - name: Publish GitHub Release
-        if: github.event_name != 'pull_request'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Generate Release Notes
+        id: notes
         run: |
-          TAG="${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || 'v1.0.0' }}"
-          echo "Target Release Tag: $TAG"
-
           cat << 'EOF' > release-notes.md
           ## TVLink v1.0.0 📺
 
           A modern, open-source wireless ADB remote control, app sideload installer, and TV settings manager for Android TV and Google TV devices over local Wi-Fi.
+
+          ---
+
+          ### 📥 Direct Downloads
+          * 🟢 **[Download TVLink-v1.0.0.apk (Release)](https://github.com/${{ github.repository }}/releases/latest/download/TVLink-v1.0.0.apk)**
+          * ⚡ **[Permanent Latest APK: TVLink-latest.apk](https://github.com/${{ github.repository }}/releases/latest/download/TVLink-latest.apk)**
+          * 🐞 **[Download TVLink-v1.0.0-debug.apk (Debug)](https://github.com/${{ github.repository }}/releases/latest/download/TVLink-v1.0.0-debug.apk)**
 
           ---
 
@@ -152,17 +155,21 @@ jobs:
           cat release-assets/checksums.txt >> release-notes.md
           echo '```' >> release-notes.md
 
-          # Publish via GitHub CLI
-          if gh release view "$TAG" >/dev/null 2>&1; then
-            echo "Release $TAG already exists on GitHub. Updating assets..."
-            gh release upload "$TAG" release-assets/TVLink-v1.0.0.apk release-assets/TVLink-v1.0.0-debug.apk release-assets/checksums.txt --clobber
-            gh release edit "$TAG" --title "TVLink $TAG" --notes-file release-notes.md --latest
-            echo "Successfully updated GitHub Release $TAG"
-          else
-            echo "Creating new release $TAG on GitHub..."
-            gh release create "$TAG" release-assets/TVLink-v1.0.0.apk release-assets/TVLink-v1.0.0-debug.apk release-assets/checksums.txt \
-              --title "TVLink $TAG" \
-              --notes-file release-notes.md \
-              --latest
-            echo "Successfully published GitHub Release $TAG"
-          fi
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        if: github.event_name != 'pull_request'
+        with:
+          tag_name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || 'v1.0.0' }}
+          name: TVLink ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || 'v1.0.0' }}
+          draft: false
+          prerelease: false
+          make_latest: true
+          generate_release_notes: true
+          body_path: release-notes.md
+          files: |
+            release-assets/TVLink-v1.0.0.apk
+            release-assets/TVLink-v1.0.0-debug.apk
+            release-assets/TVLink-latest.apk
+            release-assets/checksums.txt
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
